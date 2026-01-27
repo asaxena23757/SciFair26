@@ -1,8 +1,16 @@
 import pandas as pd
 import numpy as np
 import random
+import math
+
+#Global Varibles
+num_of_100mev = 0.0
 
 def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
+    
+    #Varibles
+    global num_of_100mev
+
     # 1. Load the data
     df = pd.read_csv(file_path)
     
@@ -15,6 +23,9 @@ def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
     # 4. Filter by starting and ending row
     # (Using slice to handle range)
     selected_data = df.iloc[start_row : end_row + 1].copy()
+
+    # To check for which rows/ values are being used in calculations
+    # print("Selected data:",selected_data)
     
     # Energy Range setup (Step 6)
     energy_bins = [(10, 30), (30, 60), (60, 100)]
@@ -31,7 +42,10 @@ def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
         
         # Calculate number of particles to simulate for this specific day
         num_to_simulate = int(total_particles_input * perc_10mev)
-        num_of_100mev = int(total_particles_input * perc_100mev)
+        global num_of_100mev
+        num_of_100mev = (total_particles_input * perc_100mev) + num_of_100mev
+
+        # print(total_particles_input,":", perc_100mev,":",total_particles_input * perc_100mev )
         
         for _ in range(num_to_simulate):
             # Choose a bin based on the provided weights
@@ -46,15 +60,16 @@ def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
 
 # --- Configuration ---
 CSV_FILE = "D:\\5-Projects\\SciFair26\\InputData\\ONLY 2003 SciFairDataTables - 2003_SPE_Data.csv"
-START = 299  # Starting row index (e.g., late October)
-END = 300    # Ending row index
+START = 0  # Starting row index (e.g., late October)
+END = 368    # Ending row index
 PARTICLES = 10000 # Your input variable for number of particles
 
 # Run the simulation
+# Any number refers to the row +2 that number
 energy_list = run_spe_simulation(CSV_FILE, START, END, PARTICLES)
 
 # Output results
-print(f"Simulation complete for rows {START} to {END}.")
+print(f"Simulation complete for rows {START+2} to {END+2}.")
 print(f"Total particles generated in the >10 MeV category: {len(energy_list)}")
 print(f"Sample of generated energies (MeV): {energy_list[:10]}")
-print(f"Total particles generated in the >100 MeV category:", num_of_100mev)
+print(f"Total particles generated in the >100 MeV category:", math.floor(num_of_100mev))
