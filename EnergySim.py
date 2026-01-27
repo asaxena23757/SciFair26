@@ -44,7 +44,7 @@ def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
 
 # --- Configuration ---
 CSV_FILE = "D:\\5-Projects\\SciFair26\\InputData\\ONLY 2003 SciFairDataTables - 2003_SPE_Data.csv"
-START = 290  # Starting row index (e.g., late October)
+START = 299  # Starting row index (e.g., late October)
 END = 300    # Ending row index
 PARTICLES = 10000 # Your input variable for number of particles
 
