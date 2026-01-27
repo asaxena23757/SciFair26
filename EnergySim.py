@@ -27,9 +27,11 @@ def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
         # Get the percentage of particles in the >10 MeV range
         # Clean the string "6.01%" and convert to decimal
         perc_10mev = float(str(row['% >10 MeV']).strip('%')) / 100.0
+        perc_100mev = float(str(row['% >100 MeV']).strip('%')) / 100.0
         
         # Calculate number of particles to simulate for this specific day
         num_to_simulate = int(total_particles_input * perc_10mev)
+        num_of_100mev = int(total_particles_input * perc_100mev)
         
         for _ in range(num_to_simulate):
             # Choose a bin based on the provided weights
@@ -55,3 +57,4 @@ energy_list = run_spe_simulation(CSV_FILE, START, END, PARTICLES)
 print(f"Simulation complete for rows {START} to {END}.")
 print(f"Total particles generated in the >10 MeV category: {len(energy_list)}")
 print(f"Sample of generated energies (MeV): {energy_list[:10]}")
+print(f"Total particles generated in the >100 MeV category:", num_of_100mev)
