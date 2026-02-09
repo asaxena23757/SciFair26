@@ -4,103 +4,97 @@ import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
+import os  # Added to check for file existence
 
-# Global Varibles
+DEFAULT_FILE_PATH = "D:\\5-Projects\\SciFair26\\InputData\\SciFairDataTables - 2003_SPE_Data.csv"
+
+#Varibles
 num_of_100mev = 0.0
+dedx = 0.0
+
 
 def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
     global num_of_100mev
-    num_of_100mev = 0.0 # Reset for each run
-
-    # 1. Load the data
+    num_of_100mev = 0.0 
     df = pd.read_csv(file_path)
-    
-    # 3. Import specific columns into a 2D array
-    data_2d_array = df[['#  Date', '>1 MeV ', '>10 MeV ', '>100 MeV ']].values
-    
-    # 4. Filter by starting and ending row
     selected_data = df.iloc[start_row : end_row + 1].copy()
-
-    # Energy Range setup
     energy_bins = [(10, 30), (30, 60), (60, 100)]
     weights = [0.85, 0.10, 0.04]
-    
     all_generated_energies = []
 
-    # Iterate through each day in the selected range
     for index, row in selected_data.iterrows():
         perc_10mev = float(str(row['% >10 MeV']).strip('%')) / 100.0
         perc_100mev = float(str(row['% >100 MeV']).strip('%')) / 100.0
-        
         num_to_simulate = int(total_particles_input * perc_10mev)
         num_of_100mev = (total_particles_input * perc_100mev) + num_of_100mev
-        
         for _ in range(num_to_simulate):
             chosen_bin = random.choices(energy_bins, weights=weights, k=1)[0]
             specific_energy = random.uniform(chosen_bin[0], chosen_bin[1])
             all_generated_energies.append(specific_energy)
-            
     return all_generated_energies
 
-# --- STREAMLIT IMPLEMENTATION ---
+def mat_simulation(material,):
+    #Material, density, Z/A Ratio, I-value
+    material = [("Aluminum",2.7,.481,166), ("Polyethylene",.94,.571,57.4), ("Water",1,.555,75)]
+    # create a loop for some tiny step, and calculate the energy loss
+    #sum up energy lost, different things depending on organic vs no organic material toggalabe option
+    #
 
+def bethe_bloche(kinetic_energy, density, za_Ratio, i_value):
+    global dedx
+    dedx = 0.0
+    rest_mass_proton = 938.27 
+    rest_mass_electron = .510998
+    k = .307236
+    #Calc gamma
+    gamma_int = 1 + (kinetic_energy/rest_mass_proton) 
+    #Calc beta
+    beta_int = math.sqrt(1-(1/(gamma_int^2)))
+    # low energy check
+    if beta_int^2 < 1e-6:
+        return 0
+    #Calc Bethe Bloch
+    bethe_bloche_t1 = (k * density * za_Ratio)/(beta_int^2)
+    bethe_bloche_t2 = math.log ((2 * rest_mass_electron^2 * beta_int^2 * gamma_int^2)/i_value)
+    dedx = bethe_bloche_t1 * (bethe_bloche_t2 - beta_int^2)
+    return dedx
+
+# Streamlit
 st.title("Solar Particle Event (SPE) Simulation")
-st.markdown("""
-This simulation models radiation risk by analyzing historical NASA data. 
-Adjust the parameters below to see how particle distributions change.
-""")
 
-# Sidebar for Configuration
-st.sidebar.header("Simulation Settings")
-
-# 1. File Path Input
-# Default set to your local path; added a file uploader option for flexibility
-CSV_FILE = st.sidebar.text_input("CSV File Path", value="ONLY 2003 SciFairDataTables - 2003_SPE_Data.csv")
-
-# 2. Particle Input
-PARTICLES = st.sidebar.number_input("Number of particles for simulation", value=10000, step=1000)
-
-# 3. Row Range Sliders
-# We load the dataframe just to find the max length for the slider
-try:
-    temp_df = pd.read_csv(CSV_FILE)
-    max_rows = len(temp_df) - 1
+#File trouble shot
+if not os.path.exists(DEFAULT_FILE_PATH):
+    st.error(f"FILE NOT FOUND AT: {DEFAULT_FILE_PATH}")
+    st.info("**Troubleshooting Tips:**\n"
+            "1. Open your folder containing your data as a .csv file"
+            "2. Ensure the file path is corrrect by copying the file explorer address bar"
+            "3. Ensure the D: drive is plugged in and accessible.")
+else:
+    #Rest of the code only runs if file is found
+    st.success("Connected to SPE Database")
     
-    START, END = st.sidebar.slider(
-        "Select Range of Rows (Dates)",
-        0, max_rows, (0, max_rows)
-    )
+    st.sidebar.header("Simulation Settings")
+    PARTICLES = st.sidebar.number_input("Number of particles for sim", value=10000, step=1000)
 
-    # Run Simulation Button
-    if st.sidebar.button("🚀 Run Simulation"):
-        energy_list = run_spe_simulation(CSV_FILE, START, END, PARTICLES)
+    try:
+        temp_df = pd.read_csv(DEFAULT_FILE_PATH)
+        max_rows = len(temp_df) - 1
+        START, END = st.sidebar.slider("Select Row Range", 0, max_rows, (0, max_rows))
 
-        # Output Metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Rows Processed", f"{START+2} to {END+2}")
-        with col2:
-            st.metric(">10 MeV Count", len(energy_list))
-        with col3:
-            st.metric(">100 MeV Count", math.floor(num_of_100mev))
+        if st.sidebar.button("Run Simulation"):
+            energy_list = run_spe_simulation(DEFAULT_FILE_PATH, START, END, PARTICLES)
+            col1, col2 = st.columns(2)
+            col1.metric(">10 MeV Generated", len(energy_list))
+            col2.metric(">100 MeV Total", math.floor(num_of_100mev))
 
-        # Data Visualization
-        st.subheader("📊 Generated Energy Distribution")
-        if energy_list:
-            fig, ax = plt.subplots()
-            ax.hist(energy_list, bins=20, color='orange', edgecolor='black')
-            ax.set_xlabel("Energy (MeV)")
-            ax.set_ylabel("Particle Count")
-            ax.set_title("Stochastic Energy Distribution (>10 MeV Range)")
-            st.pyplot(fig)
-            
-            # Show Sample Data
-            with st.expander("View Raw Energy Sample (First 100)"):
-                st.write(energy_list[:100])
-        else:
-            st.warning("No particles generated for the selected range. Check if the percentage data for these rows is above 0%.")
+            st.subheader("Energy Distribution Profile")
+            if energy_list:
+                fig, ax = plt.subplots()
+                ax.hist(energy_list, bins=30, color='skyblue', edgecolor='black')
+                ax.set_xlabel("Energy (MeV)")
+                st.pyplot(fig)
 
-except FileNotFoundError:
-    st.error(f"Could not find the file at: {CSV_FILE}. Please check the path.")
-except Exception as e:
-    st.error(f"An error occurred: {e}")
+    except Exception as e:
+        st.error(f"Error reading data: {e}")
+
+#streamlit run EnergySim.py
