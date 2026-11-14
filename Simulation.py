@@ -1,105 +1,100 @@
-import numpy as np
+import streamlit as st
 import pandas as pd
+import numpy as np
 import random
 import math
+import matplotlib.pyplot as plt
+import os  # Added to check for file existence
 
-# 1. PHYSICAL CONSTANTS
-K = 0.3072      # MeV*cm^2/mol
-ME = 0.511     # Electron rest mass (MeV)
-MP = 938.27    # Proton rest mass (MeV)
+DEFAULT_FILE_PATH = "D:\\5-Projects\\SciFair26\\InputData\\SciFairDataTables - 2003_SPE_Data.csv"
 
-# 2. CHOOSE MATERIAL COMPOSITION PROPERTIES
-# You can change these variables depending on which material you want to run
-MATERIAL_NAME = "Water"
-Z_A_RATIO = 0.55506     # Electron Density Ratio (Z/A)
-I_POTENTIAL = 75.0 / 1e6 # Mean Excitation Potential (Converted to MeV)
-DENSITY = 1.0           # Physical Density (g/cm^3)
+#Varibles
+num_of_100mev = 0.0
+dedx = 0.0
 
-# 3. STOCHASTIC BINNING GENERATOR (NOAA Data Simulation)
-# Bins represent proton energies: [10-30 MeV, 30-60 MeV, 60-100 MeV]
-BINS = [(10, 30), (30, 60), (60, 100)]
-WEIGHTS = [0.85, 0.10, 0.05] 
 
-def generate_incoming_storm(total_particles=10000):
-    """Filters out low-energy particles and applies stochastic weights"""
-    harmful_particles = []
-    # Around 15% of the total event particles are potentially harmful (>10 MeV)
-    harmful_count = int(total_particles * 0.15)
-    
-    for _ in range(harmful_count):
-        selected_bin = random.choices(BINS, weights=WEIGHTS)[0]
-        initial_energy = random.uniform(selected_bin[0], selected_bin[1])
-        harmful_particles.append(initial_energy)
-    return harmful_particles
+def run_spe_simulation(file_path, start_row, end_row, total_particles_input):
+    global num_of_100mev
+    num_of_100mev = 0.0 
+    df = pd.read_csv(file_path)
+    selected_data = df.iloc[start_row : end_row + 1].copy()
+    energy_bins = [(10, 30), (30, 60), (60, 100)]
+    weights = [0.85, 0.10, 0.04]
+    all_generated_energies = []
 
-# 4. SIMPLIFIED BETHE-BLOCH ENGINE (-dE/dx)
-def calculate_stopping_power(energy, za_ratio, i_pot):
-    """Calculates electronic stopping power in MeV * cm^2 / g"""
-    if energy <= 0.01: 
+    for index, row in selected_data.iterrows():
+        perc_10mev = float(str(row['% >10 MeV']).strip('%')) / 100.0
+        perc_100mev = float(str(row['% >100 MeV']).strip('%')) / 100.0
+        num_to_simulate = int(total_particles_input * perc_10mev)
+        num_of_100mev = (total_particles_input * perc_100mev) + num_of_100mev
+        for _ in range(num_to_simulate):
+            chosen_bin = random.choices(energy_bins, weights=weights, k=1)[0]
+            specific_energy = random.uniform(chosen_bin[0], chosen_bin[1])
+            all_generated_energies.append(specific_energy)
+    return all_generated_energies
+
+def mat_simulation(material,):
+    #Material, density, Z/A Ratio, I-value
+    material = [("Aluminum",2.7,.481,166), ("Polyethylene",.94,.571,57.4), ("Water",1,.555,75)]
+    # create a loop for some tiny step, and calculate the energy loss
+    #sum up energy lost, different things depending on organic vs no organic material toggalabe option
+    #
+
+def bethe_bloche(kinetic_energy, density, za_Ratio, i_value):
+    global dedx
+    dedx = 0.0
+    rest_mass_proton = 938.27 
+    rest_mass_electron = .510998
+    k = .307236
+    #Calc gamma
+    gamma_int = 1 + (kinetic_energy/rest_mass_proton) 
+    #Calc beta
+    beta_int = math.sqrt(1-(1/(gamma_int^2)))
+    # low energy check
+    if beta_int^2 < 1e-6:
         return 0
-    gamma = 1 + (energy / MP)
-    beta_sq = 1 - (1 / (gamma**2))
-    if beta_sq <= 0: 
-        return 0
-    
-    # Core Formula Implementation
-    front_term = K * (1**2) * za_ratio / beta_sq
-    log_argument = (2 * ME * beta_sq * (gamma**2)) / i_pot
-    
-    if log_argument <= 1: 
-        return 0
-    bracket_term = math.log(log_argument) - beta_sq
-    return front_term * bracket_term
+    #Calc Bethe Bloch
+    bethe_bloche_t1 = (k * density * za_Ratio)/(beta_int^2)
+    bethe_bloche_t2 = math.log ((2 * rest_mass_electron^2 * beta_int^2 * gamma_int^2)/i_value)
+    dedx = bethe_bloche_t1 * (bethe_bloche_t2 - beta_int^2)
+    return dedx
 
-# 5. STEP FUNCTION LOOP USING MATCHED AREAL DENSITIES
-def execute_simulation(initial_energies, areal_densities):
-    """Iteratively reduces particle energy across specified slices"""
-    all_rows = []
-    
-    for e_init in initial_energies:
-        row_data = [e_init]
-        current_energy = e_init
-        prev_x = 0
-        
-        for idx, target_x in enumerate(areal_densities):
-            dx = target_x - prev_x
-            
-            # Sub-stepping loop for numerical integration stability
-            sub_steps = 10
-            sub_dx = dx / sub_steps
-            for _ in range(sub_steps):
-                if current_energy > 0.05:
-                    loss = calculate_stopping_power(current_energy, Z_A_RATIO, I_POTENTIAL) * sub_dx
-                    current_energy -= loss
-                else:
-                    current_energy = 0
-            
-            row_data.append(target_x)
-            row_data.append(max(0.0, current_energy))
-            prev_x = target_x
-            
-        all_rows.append(row_data)
-    return all_rows
+# Streamlit
+st.title("Solar Particle Event (SPE) Simulation")
 
-# 6. RUN AND EXPORT DATA
-if __name__ == "__main__":
-    # Areal Densities (g/cm^2) matched to your standard experimental parameters
-    experimental_areal_densities = [0.27, 1.35, 2.7, 5.4, 9.45, 13.5, 20.25]
+#File trouble shot
+if not os.path.exists(DEFAULT_FILE_PATH):
+    st.error(f"FILE NOT FOUND AT: {DEFAULT_FILE_PATH}")
+    st.info("**Troubleshooting Tips:**\n"
+            "1. Open your folder containing your data as a .csv file"
+            "2. Ensure the file path is corrrect by copying the file explorer address bar"
+            "3. Ensure the D: drive is plugged in and accessible.")
+else:
+    #Rest of the code only runs if file is found
+    st.success("Connected to SPE Database")
     
-    # Seed generation to hold environmental control parameters constant
-    random.seed(42)
-    incoming_spectrum = generate_incoming_storm(10000)
-    
-    print(f"Simulating {len(incoming_spectrum)} protons through {MATERIAL_NAME}...")
-    sim_data = execute_simulation(incoming_spectrum, experimental_areal_densities)
-    
-    # Constructing DataFrame columns dynamically
-    columns = ['Initial_Energy_MeV']
-    for i in range(len(experimental_areal_densities)):
-        columns.append(f'Areal_Density_{i+1}')
-        columns.append(f'Final_Energy_{i+1}')
-        
-    df = pd.DataFrame(sim_data, columns=columns)
-    output_filename = f"2000_{MATERIAL_NAME}_Density_Simulation_Results.csv"
-    df.to_csv(output_filename, index=False)
-    print(f"Success! Complete simulation dataset saved as: '{output_filename}' ({len(df)} rows generated).")
+    st.sidebar.header("Simulation Settings")
+    PARTICLES = st.sidebar.number_input("Number of particles for sim", value=10000, step=1000)
+
+    try:
+        temp_df = pd.read_csv(DEFAULT_FILE_PATH)
+        max_rows = len(temp_df) - 1
+        START, END = st.sidebar.slider("Select Row Range", 0, max_rows, (0, max_rows))
+
+        if st.sidebar.button("Run Simulation"):
+            energy_list = run_spe_simulation(DEFAULT_FILE_PATH, START, END, PARTICLES)
+            col1, col2 = st.columns(2)
+            col1.metric(">10 MeV Generated", len(energy_list))
+            col2.metric(">100 MeV Total", math.floor(num_of_100mev))
+
+            st.subheader("Energy Distribution Profile")
+            if energy_list:
+                fig, ax = plt.subplots()
+                ax.hist(energy_list, bins=30, color='skyblue', edgecolor='black')
+                ax.set_xlabel("Energy (MeV)")
+                st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Error reading data: {e}")
+
+#streamlit run EnergySim.py
